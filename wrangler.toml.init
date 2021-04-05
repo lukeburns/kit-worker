@@ -1,0 +1,8 @@
+name = "kit-worker"
+type = "webpack"
+workers_dev = true
+account_id = ""
+
+[site]
+bucket = "./build/assets"
+entry-point = "./workers-site"
