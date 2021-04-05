@@ -3,13 +3,13 @@
 	"version": "0.0.1",
 	"scripts": {
 		"dev": "svelte-kit dev",
-		"build": "svelte-kit build && wrangler build",
+		"build": "svelte-kit build",
 		"start": "wrangler dev --port 3000",
 		"deploy": "wrangler publish"
 	},
 	"devDependencies": {
 		"@cloudflare/wrangler": "^1.15.0",
-		"@sveltejs/adapter-node": "next",
+		"@sveltejs/adapter-cloudflare-workers": "next",
 		"@sveltejs/kit": "next",
 		"sass": "^1.0.0",
 		"svelte": "^3.29.0",

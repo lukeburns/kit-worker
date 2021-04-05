@@ -4,5 +4,5 @@ workers_dev = true
 account_id = ""
 
 [site]
-bucket = "./build/assets"
+bucket = "./build"
 entry-point = "./workers-site"

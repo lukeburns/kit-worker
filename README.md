@@ -4,12 +4,11 @@
 
 ```
 npm i
-wrangler dev
+npm run dev
 ```
 to develop locally then
 ```
+npm run build
 wrangler publish
 ```
 when you're ready to deploy.
-
-cloudflare worker is here: `/worker-site/index.js`

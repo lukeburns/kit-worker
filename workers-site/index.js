@@ -1,98 +1,70 @@
-import url from 'url'
-import { render } from '../build/app.js'
-import { getAssetFromKV, mapRequestToAsset } from '@cloudflare/kv-asset-handler'
+import { render } from './app.js'; // eslint-disable-line import/no-unresolved
+import { getAssetFromKV, NotFoundError } from '@cloudflare/kv-asset-handler'; // eslint-disable-line import/no-unresolved
 
-/**
- * The DEBUG flag will skip caching on the edge,
- * which makes it easier to debug.
- */
-const DEBUG = false
-
-/**
- * Render with Svelte-Kit
- **/
-async function renderRequest (request) {
-  const purl = url.parse(request.url)
-  const rendered = await render({
-    method: request.method,
-    headers: request.headers,
-    body: request.body,
-    url: request.url,
-    path: purl.pathname || '/',
-    query: purl.query || ''
-  })
-  return new Response(rendered.body, {
-    status: rendered.status,
-    headers: { 'Content-Type': 'text/html', 'ETag': JSON.parse(rendered.etag || '""') || undefined }
-  })
+// From https://developers.cloudflare.com/workers/examples/read-post
+async function readRequestBody(request) {
+	const { headers } = request;
+	const contentType = headers.get('content-type') || '';
+	if (contentType.includes('application/json')) {
+		return JSON.stringify(await request.json());
+	} else if (contentType.includes('application/text')) {
+		return await request.text();
+	} else if (contentType.includes('text/html')) {
+		return await request.text();
+	} else if (contentType.includes('form')) {
+		return await request.formData();
+	} else {
+		const myBlob = await request.blob();
+		const objectURL = URL.createObjectURL(myBlob);
+		return objectURL;
+	}
 }
 
-addEventListener('fetch', event => {
-  try {
-    event.respondWith(handleEvent(event))
-  } catch (e) {
-    if (DEBUG) {
-      return event.respondWith(
-        new Response(e.message || e.toString(), {
-          status: 500
-        }),
-      )
-    }
-    event.respondWith(new Response('Internal Error', { status: 500 }))
-  }
-})
+addEventListener('fetch', (event) => {
+	event.respondWith(handleEvent(event));
+});
 
-async function handleEvent (event) {
-  const url = new URL(event.request.url)
-  let options = {}
+async function handleEvent(event) {
+	//try static files first
+	if (event.request.method == 'GET') {
+		try {
+			return await getAssetFromKV(event);
+		} catch (e) {
+			if (!(e instanceof NotFoundError)) {
+				return new Response('Error loading static asset:' + (e.message || e.toString()), {
+					status: 500
+				});
+			}
+		}
+	}
 
-  /**
-   * You can add custom logic to how we fetch your assets
-   * by configuring the function `mapRequestToAsset`
-   */
-  // options.mapRequestToAsset = handlePrefix(/^\/docs/)
+	//fall back to an app route
+	const request = event.request;
+	const request_url = new URL(request.url);
 
-  try {
-    if (DEBUG) {
-      // customize caching
-      options.cacheControl = {
-        bypassCache: true
-      }
-    }
-    const page = await getAssetFromKV(event, options)
+	try {
+		const rendered = await render({
+			host: request_url.host,
+			path: request_url.pathname,
+			query: request_url.searchParams,
+			body: request.body ? await readRequestBody(request) : null,
+			headers: request.headers,
+			method: request.method
+		});
 
-    // allow headers to be altered
-    const response = new Response(page.body, page)
+		if (rendered) {
+			const response = new Response(rendered.body, {
+				status: rendered.status,
+				headers: rendered.headers
+			});
+			return response;
+		}
+	} catch (e) {
+		return new Response('Error rendering route:' + (e.message || e.toString()), { status: 500 });
+	}
 
-    response.headers.set('X-XSS-Protection', '1; mode=block')
-    response.headers.set('X-Content-Type-Options', 'nosniff')
-    response.headers.set('X-Frame-Options', 'DENY')
-    response.headers.set('Referrer-Policy', 'unsafe-url')
-    response.headers.set('Feature-Policy', 'none')
-
-    return response
-  } catch (e) {
-    return await renderRequest(event.request)
-  }
-}
-
-/**
- * Here's one example of how to modify a request to
- * remove a specific prefix, in this case `/docs` from
- * the url. This can be useful if you are deploying to a
- * route on a zone, or if you only want your static content
- * to exist at a specific path.
- */
-function handlePrefix (prefix) {
-  return request => {
-    // compute the default (e.g. / -> index.html)
-    let defaultAssetKey = mapRequestToAsset(request)
-    let url = new URL(defaultAssetKey.url)
-
-    // strip the prefix from the path for lookup
-    url.pathname = url.pathname.replace(prefix, '/')
-
-    // inherit all other props from the default request
-    return new Request(url.toString(), defaultAssetKey)
-  }
+	return new Response({
+		status: 404,
+		statusText: 'Not Found'
+	});
 }
