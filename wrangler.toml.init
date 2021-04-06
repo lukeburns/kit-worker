@@ -1,5 +1,5 @@
 name = "kit-worker"
-type = "webpack"
+type = "javascript"
 workers_dev = true
 account_id = ""
 
